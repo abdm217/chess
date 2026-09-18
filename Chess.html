@@ -1,0 +1,310 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chess Game</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #151922;
+  color: white;
+  font-family: Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+.game { width: 100%; max-width: 560px; text-align: center; }
+h1 { margin: 0 0 10px; }
+.status {
+  background: #242b3a;
+  padding: 14px;
+  border-radius: 10px;
+  margin-bottom: 15px;
+  font-weight: bold;
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  width: 100%;
+  aspect-ratio: 1;
+  border: 4px solid #343b4d;
+}
+.square {
+  border: 0;
+  padding: 0;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(25px, 7vw, 52px);
+  cursor: pointer;
+  position: relative;
+}
+.light { background: #f0d9b5; }
+.dark { background: #b58863; }
+.square.selected {
+  outline: 4px solid #facc15;
+  outline-offset: -4px;
+  z-index: 1;
+}
+.square.move::after {
+  content: "";
+  width: 25%;
+  height: 25%;
+  background: #0006;
+  border-radius: 50%;
+  position: absolute;
+}
+.square.capture {
+  box-shadow: inset 0 0 0 5px #ef4444;
+}
+.piece {
+  position: relative;
+  z-index: 2;
+  line-height: 1;
+  user-select: none;
+  font-family: "Segoe UI Symbol", serif;
+}
+.white-piece {
+  color: white;
+  text-shadow: 1px 1px 2px black;
+}
+.black-piece { color: #111; }
+button.action {
+  margin-top: 18px;
+  padding: 12px 22px;
+  border: 0;
+  border-radius: 8px;
+  background: #4f7cff;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 15px;
+}
+</style>
+</head>
+<body>
+
+<div class="game">
+  <h1>♟ Chess Game</h1>
+  <div class="status" id="status">White's turn</div>
+  <div class="board" id="board"></div>
+  <button class="action" onclick="resetGame()">↻ Reset Game</button>
+  <button class="action" onclick="flipBoard()">⇅ Flip Board</button>
+</div>
+
+<script>
+const symbols = {
+  w: { k:"♔", q:"♕", r:"♖", b:"♗", n:"♘", p:"♙" },
+  b: { k:"♚", q:"♛", r:"♜", b:"♝", n:"♞", p:"♟" }
+};
+
+const initialBoard = [
+  ["br","bn","bb","bq","bk","bb","bn","br"],
+  ["bp","bp","bp","bp","bp","bp","bp","bp"],
+  [null,null,null,null,null,null,null,null],
+  [null,null,null,null,null,null,null,null],
+  [null,null,null,null,null,null,null,null],
+  [null,null,null,null,null,null,null,null],
+  ["wp","wp","wp","wp","wp","wp","wp","wp"],
+  ["wr","wn","wb","wq","wk","wb","wn","wr"]
+];
+
+let board, turn, selected, flipped, gameOver;
+
+function resetGame() {
+  board = initialBoard.map(row => [...row]);
+  turn = "w";
+  selected = null;
+  flipped = false;
+  gameOver = false;
+  render();
+}
+
+function flipBoard() {
+  flipped = !flipped;
+  render();
+}
+
+function render() {
+  const boardElement = document.getElementById("board");
+  const status = document.getElementById("status");
+
+  boardElement.innerHTML = "";
+
+  const rows = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+  const cols = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+
+  rows.forEach(r => {
+    cols.forEach(c => {
+      const square = document.createElement("button");
+      square.className = "square " +
+        ((r + c) % 2 === 0 ? "light" : "dark");
+
+      if (selected && selected.r === r && selected.c === c) {
+        square.classList.add("selected");
+      }
+
+      if (selected && isLegalMove(selected.r, selected.c, r, c)) {
+        square.classList.add(board[r][c] ? "capture" : "move");
+      }
+
+      const piece = board[r][c];
+
+      if (piece) {
+        const span = document.createElement("span");
+        span.className = "piece " +
+          (piece[0] === "w" ? "white-piece" : "black-piece");
+        span.textContent = symbols[piece[0]][piece[1]];
+        square.appendChild(span);
+      }
+
+      square.addEventListener("click", () => handleClick(r, c));
+      boardElement.appendChild(square);
+    });
+  });
+
+  status.textContent = gameOver
+    ? "Game Over"
+    : (turn === "w" ? "White" : "Black") + "'s turn";
+}
+
+function handleClick(r, c) {
+  if (gameOver) return;
+
+  const piece = board[r][c];
+
+  if (selected) {
+    if (isLegalMove(selected.r, selected.c, r, c)) {
+      movePiece(selected.r, selected.c, r, c);
+      selected = null;
+      turn = turn === "w" ? "b" : "w";
+      render();
+      return;
+    }
+
+    if (piece && piece[0] === turn) {
+      selected = {r, c};
+      render();
+      return;
+    }
+
+    selected = null;
+    render();
+    return;
+  }
+
+  if (piece && piece[0] === turn) {
+    selected = {r, c};
+    render();
+  }
+}
+
+function movePiece(fr, fc, tr, tc) {
+  const piece = board[fr][fc];
+  const captured = board[tr][tc];
+
+  board[tr][tc] = piece;
+  board[fr][fc] = null;
+
+  if (piece[1] === "p" && (tr === 0 || tr === 7)) {
+    board[tr][tc] = piece[0] + "q";
+  }
+
+  if (captured && captured[1] === "k") {
+    gameOver = true;
+  }
+}
+
+function isLegalMove(fr, fc, tr, tc) {
+  if (fr === tr && fc === tc) return false;
+
+  const piece = board[fr][fc];
+  const target = board[tr][tc];
+
+  if (!piece || piece[0] !== turn) return false;
+  if (target && target[0] === piece[0]) return false;
+
+  const dr = tr - fr;
+  const dc = tc - fc;
+  const type = piece[1];
+
+  if (type === "p") {
+    return pawnMove(piece[0], fr, fc, tr, tc);
+  }
+
+  if (type === "r") return rookMove(fr,fc,tr,tc);
+  if (type === "b") return bishopMove(fr,fc,tr,tc);
+
+  if (type === "q") {
+    return rookMove(fr,fc,tr,tc) ||
+           bishopMove(fr,fc,tr,tc);
+  }
+
+  if (type === "n") {
+    return Math.abs(dr) === 2 && Math.abs(dc) === 1 ||
+           Math.abs(dr) === 1 && Math.abs(dc) === 2;
+  }
+
+  if (type === "k") {
+    return Math.abs(dr) <= 1 && Math.abs(dc) <= 1;
+  }
+
+  return false;
+}
+
+function pawnMove(color, fr, fc, tr, tc) {
+  const direction = color === "w" ? -1 : 1;
+  const start = color === "w" ? 6 : 1;
+  const target = board[tr][tc];
+
+  if (fc === tc && !target && tr === fr + direction) return true;
+
+  if (fc === tc && !target &&
+      fr === start &&
+      tr === fr + direction * 2 &&
+      !board[fr + direction][fc]) return true;
+
+  if (Math.abs(tc - fc) === 1 &&
+      tr === fr + direction &&
+      target && target[0] !== color) return true;
+
+  return false;
+}
+
+function rookMove(fr,fc,tr,tc) {
+  if (fr !== tr && fc !== tc) return false;
+  return pathClear(fr,fc,tr,tc);
+}
+
+function bishopMove(fr,fc,tr,tc) {
+  if (Math.abs(tr-fr) !== Math.abs(tc-fc)) return false;
+  return pathClear(fr,fc,tr,tc);
+}
+
+function pathClear(fr,fc,tr,tc) {
+  const sr = Math.sign(tr-fr);
+  const sc = Math.sign(tc-fc);
+
+  let r = fr + sr;
+  let c = fc + sc;
+
+  while (r !== tr || c !== tc) {
+    if (board[r][c]) return false;
+    r += sr;
+    c += sc;
+  }
+
+  return true;
+}
+
+resetGame();
+</script>
+
+</body>
+</html>
